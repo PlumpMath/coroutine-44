@@ -55,7 +55,7 @@ void init_listen_fd()
 }
 int cmp(void* key1, void* key2)
 {
-    return (int)key1 ==(int)key2;
+    return (int)key1 ==(int)key2?0:1;
 }
 void epoll_init()
 {
@@ -79,6 +79,17 @@ void epoll_init()
         exit(EXIT_FAILURE);
     }
 }
+
+
+void clear_fd(int fd)
+{
+    ev.data.fd = fd;
+    if(epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) <0)
+    {
+        log_error("epoll_ctl EPOLL_CTL_DEL failed,fd:%d, erron:%d, reason:%s", fd, errno, strerror(errno));
+    }
+}
+
 void register_fd(int fd, int event)
 {
     log_debug("epoll_ctl register to epoll begin , fd:%d, event:%d", fd, event);
@@ -183,20 +194,35 @@ void* work(void* args)
     char buf[128];
     int len = 128;
     int fd= (int)args;
-    if(hmap_insert(&fd2upid, fd, get_upid()) <0)return -1;
+    if(hmap_insert(&fd2upid, fd, get_upid()) <0)
+    {
+        log_error("insert fd to epoll map failed");
+        return -1;
+    }
     m_recv(fd, buf, len);
     buf[127] = 0;
-    log_info("recv data: %s", buf);
+    log_info("recv client data: %s", buf);
     int sub_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if(hmap_insert(&fd2upid, sub_fd, get_upid()) <0)return -1;
+    if(hmap_insert(&fd2upid, sub_fd, get_upid()) <0)
+    {
+        log_error("insert fd to epoll map failed");
+        return -1;
+    }
     int addr_len = sizeof(struct sockaddr_in); 
     struct sockaddr_in in;
     sockaddr_init(&in, "127.0.0.1", 8001);
     m_connect(sub_fd, (struct sockaddr*)&in, addr_len);
     m_send(sub_fd, buf, len);
     m_recv(sub_fd, buf, len);
-    buf[127] = 0;
+    m_send(fd, buf, len);
     log_info("recv from other server: %s", buf);
+    clear_fd(sub_fd);
+    close(sub_fd);
+    hmap_remove(&fd2upid, sub_fd);
+    clear_fd(fd);
+    close(fd);
+    hmap_remove(&fd2upid, fd);
+    buf[127] = 0;
     return NULL;
 }
 int create_work_uthread(int fd)
@@ -218,7 +244,7 @@ int  active_work_uthread(int fd)
 
 int epoll_loop()
 {
-    nfds = epoll_wait(epollfd, events, MAX_EVENTS, 100);
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
     if (nfds == -1)
     {
         log_error("epoll_pwait");

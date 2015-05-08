@@ -94,7 +94,8 @@ void*  hmap_find(hash_map* hmap, void* key)
 {
     if(hmap == NULL) return NULL;
     int id =  (int)key % hmap->slot_size;
-    node* n = hmap->slot[id].head;
+    list* head = &hmap->slot[id];
+    node* n = head->head;
     while(n != NULL)
     {
         pair* data = n->data;
