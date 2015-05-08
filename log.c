@@ -24,7 +24,9 @@ void log_write(int prio, const char *file, int line, const char *fmt, ...)
 {
     static char last_name[256] = {0}; 
     if (prio < log_level) return;
-    time_t now = time(NULL);
+    struct timeval tmval;
+    gettimeofday(&tmval, NULL); 
+    time_t now = tmval.tv_sec;
     if ((now- last_time) > log_intval) 
     {
         char* filename = get_logfile_name();
@@ -48,8 +50,10 @@ void log_write(int prio, const char *file, int line, const char *fmt, ...)
     
     static char buf[4096] = {0};
     memset(buf, 0, 4096);
-    strftime(buf, 4095, "%Y-%m-%d %H:%M:%S ", localtime(&now));
+    strftime(buf, 4095, "%Y-%m-%d %H:%M:%S", localtime(&now));
     int len = strlen(buf);
+    snprintf(buf+len, 4095-len, ".%d ", tmval.tv_usec/1000);
+    len = strlen(buf);
     snprintf(buf+len, 4095-len, "%s [%s:%d] ", level[prio], file, line);
 
     va_list ap;
