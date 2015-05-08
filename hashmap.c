@@ -1,11 +1,12 @@
 #include "hashmap.h"
 #include <stdlib.h>
-int hmap_create(hash_map* hmap)
+int hmap_init(hash_map* hmap, cmp_func cmp)
 {
     if(hmap != NULL)
     {
         hmap->size = 0;
         hmap->slot_size = 100;
+        hmap->cmp = cmp;
         hmap->slot = (list*)malloc(sizeof(list) *  hmap->slot_size);
         if(hmap->slot  == NULL) return -1; 
         return 0;
@@ -97,7 +98,7 @@ void*  hmap_find(hash_map* hmap, void* key)
     while(n != NULL)
     {
         pair* data = n->data;
-        if(data->key == key) return data->val;
+        if(hmap->cmp(data->key,key) == 0)return data->val;
         n = n->next;
     }
     return NULL;

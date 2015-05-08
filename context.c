@@ -119,6 +119,7 @@ void uthread_yeild(void)
 {
     if(current == 0)return ;
     uthread_slots[current].status = suspend;
+    log_debug("suspend thread: %d,  running thread:0", current);
     last = current;
     current = 0;
     swapcontext(&uthread_slots[last].context, &uthread_slots[0].context);
@@ -135,20 +136,20 @@ void uthread_resume(int id)
 }
 void uthread_loop(void)
 {
-    //log_debug("loop ");
+    log_debug("begin runing uthread loop");
     int i;
-    for (i = (last + 1) % UTHREAD_MAX_NUM; i != last; i = (i + 1) % UTHREAD_MAX_NUM)
+    for (i = 1; i < UTHREAD_MAX_NUM; i++)
     {
         if (i != 0 && uthread_slots[i].status == used)
         {
             current = i;
-            //log_info("in loop, current: %d ,last:%d  ", current, last);
+            log_debug("in loop, switch to: %d", current);
             swapcontext(&uthread_slots[0].context, &uthread_slots[current].context);
             //log_debug("return to main_uthread");
 //            return; 
         }
     }
-    //log_debug("out loop, current: %d ,last:%d  ", current, last);
+    log_debug("end running uthread loop");
 }
 
 #ifdef test 

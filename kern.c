@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -52,9 +53,13 @@ void init_listen_fd()
         exit(-1);
     }
 }
+int cmp(void* key1, void* key2)
+{
+    return (int)key1 ==(int)key2;
+}
 void epoll_init()
 {
-    if(hmap_create(&fd2upid) < 0 )
+    if(hmap_init(&fd2upid, cmp) < 0 )
     {
         log_error("init hash map failed");
         exit(-1);
@@ -74,29 +79,49 @@ void epoll_init()
         exit(EXIT_FAILURE);
     }
 }
+void register_fd(int fd, int event)
+{
+    log_debug("epoll_ctl register to epoll begin , fd:%d, event:%d", fd, event);
+    setnonblocking(fd);
+    ev.events = event ;
+    ev.data.fd = fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
+    {
+        if(errno == EEXIST)
+        {
+            if(epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev)<0)
+            {
+                log_debug("epoll_ctl mod failed, fd:%d, event:%d, errno:%d, reason:%s", fd, event, errno, strerror(errno)); 
+                exit(-1);
+            }
+            else   
+            {
+                log_debug("epoll_ctl register to epoll ok, fd:%d, event:%d", fd, event);
+                return;
+            }
+        }
+        log_debug("epoll_ctl failed, fd:%d, event:%d, errno:%d, reason:%s", fd, event, errno, strerror(errno)); 
+        exit(-1);
+    }
+    log_debug("epoll_ctl register to epoll ok, fd:%d, event:%d", fd, event);
+}
 int m_recv(int fd, char* buf, int len)
 {
     log_debug("begin to recv, fd:%d", fd);
-    setnonblocking(fd);
-    ev.events = EPOLLIN ;
-    ev.data.fd = fd;
-    log_debug("epoll_ctl ");
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
-    {
-        log_error("epoll error");
-        exit(-1);
-    }
+    register_fd(fd, EPOLLIN);
     int count = 0;
     while(len>0)
     {
         int ret = read(fd, buf+count, len);
-        log_debug("read ret: %d, errno:%d, reason:%s ", ret, errno, strerror(errno));
         if(ret <= 0)
         {
+            log_debug("read ret: %d, errno:%d, reason:%s ", ret, errno, strerror(errno));
             if(errno == EAGAIN) 
             { 
                 log_debug("yeild uthread");
                 uthread_yeild();
+                log_debug("ningdegang");
+                continue;
             }
             else  
             {
@@ -110,14 +135,7 @@ int m_recv(int fd, char* buf, int len)
 }
 int m_send(int fd, char* buf, int len)
 {
-    setnonblocking(fd);
-    ev.events = EPOLLOUT ;
-    ev.data.fd = fd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD,fd, &ev) == -1)
-    {
-        log_error("add fd to epoll failed");
-        exit(-1); 
-    }
+    register_fd(fd, EPOLLOUT);
     int count = 0;
     while(len>0)
     {
@@ -137,31 +155,25 @@ void sockaddr_init(struct sockaddr_in* in, char* ip, int port)
     memset(in, 0x00, sizeof(struct sockaddr_in));
     in->sin_family = AF_INET;
     in->sin_port = htons(port);
-    inet_aton(ip, &in->sin_addr);
+    inet_pton(AF_INET, ip, &in->sin_addr);
 }
-int m_connect(int fd, struct sockaddr* addr, int* len)
+int m_connect(int fd, struct sockaddr* addr, int len)
 {   
-
     setnonblocking(fd);
-    ev.events = EPOLLOUT ;
-    ev.data.fd = fd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
+    log_debug("begin to connect to other server");
+    time_t begin = time(NULL);
+    int n = connect(fd, addr, len);
+    if(n < 0 && errno != EINPROGRESS)
     {
-        log_error("epoll error");
-        exit(-1);
+        log_error("connect failed, fd:%d, errno:%d , reason:%s", fd, errno, strerror(errno));
+        return -1;
     }
-    time_t begin = time();
-    while(1)
-    {
-        if(connect(fd, addr, len)<0 && errno == EINPROGRESS)
-        {
-            log_error("connect failed");
-            uthread_yeild();
-            time_t end = time(); 
-            if((end-begin)> 1) return -1;
-        }
-        else    return 0;
-    }
+     
+    register_fd(fd, EPOLLOUT);
+    log_info("connect is in progress");
+    uthread_yeild();
+    time_t end = time(NULL);
+    if((end-begin)> 1) return -1;
 }
 
 
@@ -180,7 +192,7 @@ void* work(void* args)
     int addr_len = sizeof(struct sockaddr_in); 
     struct sockaddr_in in;
     sockaddr_init(&in, "127.0.0.1", 8001);
-    m_connect(sub_fd, (struct sockaddr*)&in, &addr_len);
+    m_connect(sub_fd, (struct sockaddr*)&in, addr_len);
     m_send(sub_fd, buf, len);
     m_recv(sub_fd, buf, len);
     buf[127] = 0;
@@ -206,7 +218,6 @@ int  active_work_uthread(int fd)
 
 int epoll_loop()
 {
-    
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, 100);
     if (nfds == -1)
     {
