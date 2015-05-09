@@ -154,7 +154,7 @@ void* list_get_tail(list* list_head)
 
 extern int list_remove(list* list_head, void* data)
 {
-    if(list_head == NULL)return -1;
+    if(list_head == NULL|| list_head->head == NULL)return -1;
     if (list_head->size < 3)
     {
         if(list_head->head->data == data) 

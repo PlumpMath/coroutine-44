@@ -154,7 +154,11 @@ int m_send(int fd, char* buf, int len)
         if(ret == 0) uthread_yeild();
         if(ret < 0)
         {
-            if(errno == EAGAIN)uthread_yeild();
+            if(errno == EAGAIN)
+            {
+                uthread_yeild();
+                continue;
+            }
             else return -1;
         }
         len -= ret;
