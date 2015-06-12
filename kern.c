@@ -189,6 +189,7 @@ int m_connect(int fd, struct sockaddr* addr, int len)
     uthread_yeild();
     time_t end = time(NULL);
     if((end-begin)> 1) return -1;
+    return 0;
 }
 
 
@@ -264,10 +265,10 @@ int epoll_loop()
             int addrlen = sizeof(client_addr);
             
             int conn_sock = accept(listen_sock, (struct sockaddr *)&client_addr, &addrlen);
-            if (conn_sock == -1) 
+            if (conn_sock < 0 ) 
             {
-                log_error("accept");
-                exit(-1);
+                log_info("accept return %d", conn_sock);
+                continue;
             }
             log_debug("new client connect, fd:%d", conn_sock);
             create_work_uthread(conn_sock);

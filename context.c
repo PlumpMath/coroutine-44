@@ -1,10 +1,12 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "context.h"
 #include "log.h"
 
 
 #define test 
+static int ppid =0;
 static uthread_t current = 0;
 static uthread_t last = 0;
 static struct uthread_struct uthread_slots[UTHREAD_MAX_NUM];
@@ -51,6 +53,11 @@ void main_uthread(void)
         //log_debug("create parent uthread, current: %d, ", current);
         //uthread_create(NULL, uthread_func, NULL);
         uthread_loop();
+        if(getpid() == ppid)
+        {
+            int status;
+            waitpid(-1, &status, WNOHANG);  
+        }
         //log_debug("count: %d ", count++);
     }
 }
@@ -156,9 +163,18 @@ void uthread_loop(void)
 int main(int argc, char *argv[])
 {
     log_init("./log/", 60, 0);
-    uthread_t tid;
-    uthread_init();
     init_listen_fd();
+    ppid = getpid();
+    int i = 0;
+    for(;i< 4; i++)
+    {
+        int pid = fork();
+        if(pid == 0) break;
+        if(pid < 0){log_error("fork failed");} 
+    }
+    
+    log_info("pid:%d", getpid());
+    uthread_init();
     epoll_init();
 
     main_uthread();

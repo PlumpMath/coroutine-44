@@ -47,6 +47,7 @@ void hmap_expand(hash_map* hmap)
 int hmap_insert(hash_map* hmap, void* key, void* value)
 {
     if(hmap == NULL) return -1;
+    if(hmap_find(hmap, key) != NULL)hmap_remove(hmap, key);
     pair* data = (pair*)malloc(sizeof(pair));
     if(data == NULL) return -1;
     data->key  = key;
