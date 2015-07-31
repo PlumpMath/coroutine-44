@@ -52,20 +52,20 @@ void log_write(int prio, const char *file, int line, const char *fmt, ...)
     memset(buf, 0, 4096);
     strftime(buf, 4095, "%Y-%m-%d %H:%M:%S", localtime(&now));
     int len = strlen(buf);
-    snprintf(buf+len, 4095-len, ".%d ", tmval.tv_usec/1000);
+    snprintf(buf+len, 4094-len, ".%d ", tmval.tv_usec/1000);
     len = strlen(buf);
-    snprintf(buf+len, 4095-len, "%s [%s:%d] ", level[prio], file, line);
+    snprintf(buf+len, 4094-len, "%s [%s:%d] ", level[prio], file, line);
 
     va_list ap;
     va_start(ap, fmt);
     len = strlen(buf);
-    if(len>=4095) return;
-    vsnprintf(buf+len, 4095-len, fmt, ap);
+    if(len>=4094) return;
+    vsnprintf(buf+len, 4094-len, fmt, ap);
     va_end(ap);
 
     len = strlen(buf);
-    if(len>=4095) return;
-    snprintf(buf+len, 4095-len, "\n");
+    if(len>=4094) len=4094;
+    snprintf(buf+len, 4094-len, "\n\0");
 
     if(strlen(last_name)>0 && access(last_name, F_OK) < 0)
     {

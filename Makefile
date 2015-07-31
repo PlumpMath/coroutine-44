@@ -10,5 +10,5 @@ a.out:$(obj)
 #$(obj):$(src)
 #	gcc -g -o $@ -Wpointer-to-int-cast -c $<
 clean:
-	rm -rf *.o a.out
+	rm -rf *.o a.out log
     
