@@ -1,18 +1,13 @@
+#ifndef __CONTEXT_H__
+#define __CONTEXT_H__
 #include <ucontext.h>
 #define UTHREAD_MAX_NUM  256 
 #define STACK_SIZE 4096
 typedef int uthread_t;
-enum
-{
-    idle = 0,
-    used,
-    suspend
-};
 
 struct uthread_struct
 {
-    int status;
-    int parent;
+    int timeout;
     ucontext_t context;
     char stack[STACK_SIZE];
     void* (*func)(void *arg);
@@ -31,5 +26,7 @@ void uthread_init(void);
 void uthread_exit(void *exit_status);
 void uthread_helper(void);
 int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg);
-void uthread_yeild(void);
+void uthread_yeild(int ts);
 void uthread_loop(void);
+void uthread_resume(int);
+#endif

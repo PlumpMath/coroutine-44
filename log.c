@@ -7,10 +7,11 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <errno.h>
 #include "log.h"
 
-static char* log_path = NULL;
+static const char* log_path = NULL;
 static int log_level = 0;
 static int log_intval = 0;
 static time_t last_time = -1;
@@ -18,7 +19,7 @@ static int log_fd= -1;
 
 char* get_logfile_name();
 
-char* level[] = {"DEBUG", "INFO", "WARN", "ERROR" };
+const char* level[] = {"DEBUG", "INFO", "WARN", "ERROR" };
 
 void log_write(int prio, const char *file, int line, const char *fmt, ...)
 {
@@ -52,7 +53,7 @@ void log_write(int prio, const char *file, int line, const char *fmt, ...)
     memset(buf, 0, 4096);
     strftime(buf, 4095, "%Y-%m-%d %H:%M:%S", localtime(&now));
     int len = strlen(buf);
-    snprintf(buf+len, 4095-len, ".%d ", tmval.tv_usec/1000);
+    snprintf(buf+len, 4095-len, ".%lu ", tmval.tv_usec/1000);
     len = strlen(buf);
     snprintf(buf+len, 4095-len, "%s [%s:%d] ", level[prio], file, line);
 
@@ -83,7 +84,7 @@ void log_write(int prio, const char *file, int line, const char *fmt, ...)
 }
 
 
-void log_init(char* log_dir, int intval, int level)
+void log_init(const char* log_dir, int intval, int level)
 {
     if(access(log_dir, O_RDWR)!=0)  
     {  

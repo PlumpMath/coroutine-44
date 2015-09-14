@@ -10,7 +10,7 @@ extern "C" {
 #define ERROR 3
 
 #define FILE (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
- void log_init(char* log_dir, int intval, int level);
+ void log_init(const char* log_dir, int intval, int level);
  void log_write(int prio, const char* file, int line, const char *fmt, ...);
 
 #define log_error(fmt, args...) \

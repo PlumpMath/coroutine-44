@@ -1,10 +1,10 @@
-obj= log.o context.o kern.o hashmap.o list.o
+obj= log.o context.o kern.o 
 all:a.out
 a.out:$(obj)
-	gcc -g -o $@ $^
-	rm -rf *.o core*
+	g++ -g -o $@ $^
+	-rm -rf *.o core*
 %.o:%.c
-	gcc -g -o $@ -Wpointer-to-int-cast -c $<
+	g++ -g -o $@ -c $<
 clean:
-	rm -rf *.o a.out
+	-rm -rf *.o a.out
     

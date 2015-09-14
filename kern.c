@@ -1,21 +1,26 @@
 #include <sys/epoll.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <sys/types.h>   
 #include <sys/socket.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <map>
+#include <stdint.h>
 #include "kern.h"
 #include "log.h"
 #include "context.h"
-#include "hashmap.h"
 
 #define MAX_EVENTS 10
+using namespace std;
 
-hash_map fd2upid;
+map<int,int> fd2upid;
+map<int,int> fdevent;
 
 struct epoll_event ev, events[MAX_EVENTS];
 int listen_sock,nfds, epollfd;
@@ -28,6 +33,12 @@ int setnonblocking(int fd)
     iFlags |= O_NDELAY;
     fcntl(fd, F_SETFL, iFlags);
     return 0;
+}
+static uint64_t getms(void)
+{
+    timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec*1000 + tv.tv_usec/1000;
 }
 
 void init_listen_fd()
@@ -53,17 +64,8 @@ void init_listen_fd()
         exit(-1);
     }
 }
-int cmp(void* key1, void* key2)
-{
-    return (int)key1 ==(int)key2?0:1;
-}
 void epoll_init()
 {
-    if(hmap_init(&fd2upid, cmp) < 0 )
-    {
-        log_error("init hash map failed");
-        exit(-1);
-    }
     epollfd = epoll_create(10);
     if (epollfd == -1) 
     {
@@ -81,17 +83,30 @@ void epoll_init()
 }
 
 
-void clear_fd(int fd)
+void reset_fd(int fd)
 {
     ev.data.fd = fd;
     if(epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) <0)
     {
         log_error("epoll_ctl EPOLL_CTL_DEL failed,fd:%d, erron:%d, reason:%s", fd, errno, strerror(errno));
     }
+    fdevent.erase(fd);
 }
 
 void register_fd(int fd, int event)
 {
+    int old_event = fdevent[fd];
+    int op = 0;
+    if(old_event == 0)
+    {
+        op = EPOLL_CTL_ADD;
+    }
+    else 
+    {
+        op = EPOLL_CTL_MOD;
+    }
+    
+    if(old_event | event == 0)
     log_debug("epoll_ctl register to epoll begin , fd:%d, event:%d", fd, event);
     setnonblocking(fd);
     ev.events = event ;
@@ -116,7 +131,7 @@ void register_fd(int fd, int event)
     }
     log_debug("epoll_ctl register to epoll ok, fd:%d, event:%d", fd, event);
 }
-int m_recv(int fd, char* buf, int len)
+int m_recv(int fd, char* buf, int len, int timeout)
 {
     log_debug("begin to recv, fd:%d", fd);
     register_fd(fd, EPOLLIN);
@@ -127,10 +142,10 @@ int m_recv(int fd, char* buf, int len)
         if(ret <= 0)
         {
             log_debug("read ret: %d, errno:%d, reason:%s ", ret, errno, strerror(errno));
-            if(errno == EAGAIN) 
+            if(errno == EAGAIN || errno == EINTR)
             { 
                 log_debug("yeild uthread");
-                uthread_yeild();
+                uthread_yeild(timeout);
                 log_debug("ningdegang");
                 continue;
             }
@@ -144,19 +159,19 @@ int m_recv(int fd, char* buf, int len)
         count += ret;
     }
 }
-int m_send(int fd, char* buf, int len)
+int m_send(int fd, char* buf, int len, int timeout)
 {
     register_fd(fd, EPOLLOUT);
     int count = 0;
     while(len>0)
     {
         int ret = write(fd, buf+count, len);
-        if(ret == 0) uthread_yeild();
+        if(ret == 0) uthread_yeild(timeout);
         if(ret < 0)
         {
-            if(errno == EAGAIN)
+            if(errno == EAGAIN || errno == EINTR)
             {
-                uthread_yeild();
+                uthread_yeild(timeout);
                 continue;
             }
             else return -1;
@@ -165,14 +180,14 @@ int m_send(int fd, char* buf, int len)
         count += ret;
     }
 }
-void sockaddr_init(struct sockaddr_in* in, char* ip, int port)
+void sockaddr_init(struct sockaddr_in* in, const char* ip, int port)
 {
     memset(in, 0x00, sizeof(struct sockaddr_in));
     in->sin_family = AF_INET;
     in->sin_port = htons(port);
     inet_pton(AF_INET, ip, &in->sin_addr);
 }
-int m_connect(int fd, struct sockaddr* addr, int len)
+int m_connect(int fd, struct sockaddr* addr, int len, int timeout)
 {   
     setnonblocking(fd);
     log_debug("begin to connect to other server");
@@ -186,7 +201,7 @@ int m_connect(int fd, struct sockaddr* addr, int len)
      
     register_fd(fd, EPOLLOUT);
     log_info("connect is in progress");
-    uthread_yeild();
+    uthread_yeild(timeout);
     time_t end = time(NULL);
     if((end-begin)> 1) return -1;
 }
@@ -197,49 +212,45 @@ void* work(void* args)
     log_info("begin work");
     char buf[128];
     int len = 128;
-    int fd= (int)args;
-    if(hmap_insert(&fd2upid, fd, get_upid()) <0)
-    {
-        log_error("insert fd to epoll map failed");
-        return -1;
-    }
-    m_recv(fd, buf, len);
+    int fd= reinterpret_cast<int64_t>(args);
+    fd2upid[fd] = get_upid();
+    m_recv(fd, buf, len, 1000);
     buf[127] = 0;
     log_info("recv client data: %s", buf);
     int sub_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if(hmap_insert(&fd2upid, sub_fd, get_upid()) <0)
-    {
-        log_error("insert fd to epoll map failed");
-        return -1;
-    }
+    fd2upid[sub_fd] = get_upid();
     int addr_len = sizeof(struct sockaddr_in); 
     struct sockaddr_in in;
     sockaddr_init(&in, "127.0.0.1", 8001);
-    m_connect(sub_fd, (struct sockaddr*)&in, addr_len);
-    m_send(sub_fd, buf, len);
-    m_recv(sub_fd, buf, len);
-    m_send(fd, buf, len);
+    m_connect(sub_fd, (struct sockaddr*)&in, addr_len, 1000);
+    m_send(sub_fd, buf, len, 1000);
+    m_recv(sub_fd, buf, len, 1000);
+    m_send(fd, buf, len, 1000);
     log_info("recv from other server: %s", buf);
-    clear_fd(sub_fd);
+    reset_fd(sub_fd);
     close(sub_fd);
-    hmap_remove(&fd2upid, sub_fd);
-    clear_fd(fd);
+    fd2upid.erase(sub_fd);
+    reset_fd(fd);
     close(fd);
-    hmap_remove(&fd2upid, fd);
+    fd2upid.erase(fd);
     buf[127] = 0;
     return NULL;
 }
 int create_work_uthread(int fd)
 {
-    if(uthread_create(NULL, work, (void*) fd)<0)
+    int pid = uthread_create(NULL, work, reinterpret_cast<void*>(fd));
+    if(pid < 0 )
     {
         return -1;
     }
+    register_fd(fd, EPOLLIN);
+    fd2upid[fd] = pid; 
 }
 
-int  active_work_uthread(int fd)
+int active_work_uthread(int fd)
 {
-    int upid = (int)hmap_find(&fd2upid, fd);
+    int upid = fd2upid.count(fd);
+    if(upid ==1) upid = fd2upid[fd];
     log_debug("resume pid: %d", upid);
     uthread_resume(upid); 
     return 0;
@@ -263,7 +274,7 @@ int epoll_loop()
             struct sockaddr_in client_addr; 
             int addrlen = sizeof(client_addr);
             
-            int conn_sock = accept(listen_sock, (struct sockaddr *)&client_addr, &addrlen);
+            int conn_sock = accept(listen_sock, (struct sockaddr *)&client_addr, reinterpret_cast<socklen_t*>(&addrlen));
             if (conn_sock == -1) 
             {
                 log_error("accept");

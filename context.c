@@ -1,13 +1,20 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <list>
 #include "context.h"
+#include "kern.h"
 #include "log.h"
 
+using namespace std;
 
 #define test 
 static uthread_t current = 0;
 static uthread_t last = 0;
 static struct uthread_struct uthread_slots[UTHREAD_MAX_NUM];
+static list<int> idle_list;
+static list<int> ready_list;
+static list<int> wait_list;
+
 
 int get_upid()
 {
@@ -19,9 +26,8 @@ void panic(void)
     exit(EXIT_FAILURE);
 }
 
-void uthread_loop(void);
-int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg);
-void uthread_yeild(void);
+
+//int  uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg);
 
 void *func(void* a)
 {
@@ -34,7 +40,7 @@ void *uthread_func(void* argc)
     {
         return NULL;
     }
-    uthread_yeild();
+    uthread_yeild(0);
     log_debug("2, last: %d , current: %d ", last, current);
 
 //  uthread_yeild();
@@ -63,11 +69,19 @@ void uthread_context_init(int tid)
     uthread_slots[tid].context.uc_link = &uthread_slots[0].context;
 }
 
-void uthread_init(void)
+void main_uthread_init(void)
 {
     uthread_context_init(0);
-    uthread_slots[0].status = used;
-    //makecontext(&uthread_slots[0].context, main_uthread, 0);
+    makecontext(&uthread_slots[0].context, main_uthread, 0);
+}
+void child_uthread_init(void)
+{
+    for(int i=1; i<UTHREAD_MAX_NUM; i++)
+    {
+        uthread_context_init(i);
+        idle_list.push_back(i);
+    } 
+    
 }
 
 void uthread_schedule(void);
@@ -75,13 +89,8 @@ void uthread_schedule(void);
 void uthread_exit(void *exit_status)
 {
     uthread_slots[current].exit_status = exit_status;
-    uthread_slots[current].status = idle;
-    if(uthread_slots[current].parent != 0)
-    {
-        int parent =  uthread_slots[current].parent;
-        uthread_slots[parent].status  = used;
-        log_debug("zzzzzzzzzzzzzzzzzzzzz");
-    }
+    idle_list.push_back(current);
+    ready_list.remove(current);
     current = 0;
     log_debug("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
     
@@ -96,29 +105,26 @@ void uthread_helper(void)
 
 int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg)
 {
-    int i;
-    for (i = 1; i < UTHREAD_MAX_NUM; i++)
-    {
-        if (uthread_slots[i].status != idle)continue; 
-        if (thread != NULL) *thread = i;
-        uthread_context_init(i);
-        uthread_slots[i].status = used;
-        uthread_slots[i].parent = current;
-        uthread_slots[i].func = start_routine;
-        uthread_slots[i].arg = arg;
-        uthread_slots[i].exit_status = 0;
-        makecontext(&uthread_slots[i].context, uthread_helper, 0);
-        log_info("create new uthread id:%d current:%d ", i, current);
-        return 0;
-    }
-    log_info("create uthread failed ");
-    return -1;
+    if(idle_list.size() == 0)return -1;
+    int i = idle_list.front();
+    idle_list.pop_front();
+    wait_list.push_back(i);
+    if (thread != NULL) *thread = i;
+    uthread_context_init(i);
+    uthread_slots[i].func = start_routine;
+    uthread_slots[i].arg = arg;
+    uthread_slots[i].exit_status = 0;
+    makecontext(&uthread_slots[i].context, uthread_helper, 0);
+    log_info("create new uthread id:%d current:%d ", i, current);
+    return i;
 }
 
-void uthread_yeild(void)
+void uthread_yeild(int ts)
 {
     if(current == 0)return ;
-    uthread_slots[current].status = suspend;
+    wait_list.push_back(current);
+    ready_list.remove(current);
+    uthread_slots[current].timeout = ts;
     log_debug("suspend thread: %d,  running thread:0", current);
     last = current;
     current = 0;
@@ -132,22 +138,20 @@ void uthread_resume(int id)
         return;
     }
     log_debug("resume uthread:%d" , id);
-    uthread_slots[id].status = used;
+    ready_list.push_back(id);
+    wait_list.remove(id);
 }
 void uthread_loop(void)
 {
     log_debug("begin runing uthread loop");
-    int i;
-    for (i = 1; i < UTHREAD_MAX_NUM; i++)
+    while(ready_list.size() > 0)
     {
-        if (i != 0 && uthread_slots[i].status == used)
-        {
-            current = i;
-            log_debug("in loop, switch to: %d", current);
-            swapcontext(&uthread_slots[0].context, &uthread_slots[current].context);
-            //log_debug("return to main_uthread");
-//            return; 
-        }
+        int i = ready_list.front();
+        //ready_list.pop_front();
+        current = i;
+        log_debug("in loop, switch to: %d", current);
+        swapcontext(&uthread_slots[0].context, &uthread_slots[current].context);
+        //log_debug("return to main_uthread");
     }
     log_debug("end running uthread loop");
 }
@@ -157,10 +161,10 @@ int main(int argc, char *argv[])
 {
     log_init("./log/", 60, 0);
     uthread_t tid;
-    uthread_init();
+    main_uthread_init();
+    child_uthread_init();
     init_listen_fd();
     epoll_init();
-
     main_uthread();
 
     return 0;
