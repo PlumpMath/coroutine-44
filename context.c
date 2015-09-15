@@ -14,6 +14,7 @@ static struct uthread_struct uthread_slots[UTHREAD_MAX_NUM];
 static list<int> idle_list;
 static list<int> ready_list;
 static list<int> wait_list;
+static list<int> time_list;
 
 
 int get_upid()
@@ -81,7 +82,6 @@ void child_uthread_init(void)
         uthread_context_init(i);
         idle_list.push_back(i);
     } 
-    
 }
 
 void uthread_schedule(void);
@@ -122,9 +122,18 @@ int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg)
 void uthread_yeild(int ts)
 {
     if(current == 0)return ;
-    wait_list.push_back(current);
+    //time_list.add(current);
+    if(ts <= 0) ts = 5000;
+    uthread_slots[current].timeout = ts + getms();
+    for(list<int>::iterator it = time_list.begin(); it != time_list.end(); it++)
+    {
+        if(uthread_slots[*it].timeout > uthread_slots[current].timeout)
+        {
+            time_list.insert(it, current);
+            break;
+        } 
+    }
     ready_list.remove(current);
-    uthread_slots[current].timeout = ts;
     log_debug("suspend thread: %d,  running thread:0", current);
     last = current;
     current = 0;
@@ -140,6 +149,7 @@ void uthread_resume(int id)
     log_debug("resume uthread:%d" , id);
     ready_list.push_back(id);
     wait_list.remove(id);
+    time_list.remove(id);
 }
 void uthread_loop(void)
 {

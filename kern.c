@@ -1,5 +1,4 @@
 #include <sys/epoll.h>
-#include <sys/time.h>
 #include <stdlib.h>
 #include <sys/types.h>   
 #include <sys/socket.h>
@@ -33,12 +32,6 @@ int setnonblocking(int fd)
     iFlags |= O_NDELAY;
     fcntl(fd, F_SETFL, iFlags);
     return 0;
-}
-static uint64_t getms(void)
-{
-    timeval tv;
-    gettimeofday(&tv, NULL);
-    return tv.tv_sec*1000 + tv.tv_usec/1000;
 }
 
 void init_listen_fd()
