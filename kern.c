@@ -252,7 +252,7 @@ int active_work_uthread(int fd)
 
 int epoll_loop()
 {
-    nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, 10);
     if (nfds == -1)
     {
         log_error("epoll_pwait");

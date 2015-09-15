@@ -17,6 +17,9 @@ static list<int> wait_list;
 static list<int> time_list;
 
 
+static list<timer_info> timer_list;
+
+
 int get_upid()
 {
     return current;
@@ -96,13 +99,39 @@ void uthread_exit(void *exit_status)
     
 }
 
-void uthread_helper(void)
+void uthread_child(void)
 {
     void* status = uthread_slots[current].func( uthread_slots[current].arg);
     uthread_exit(status);
     log_debug("uthread id:%d exit ", current);
 }
 
+
+int create_timer(void* (*func)(void*), int time_intval, bool is_loop)
+{
+    timer_info  timer;
+    timer.func = func;
+    timer.last_time = getms();
+    timer.intval = time_intval;
+    timer.is_loop = is_loop; 
+    timer_list.push_back(timer);
+}
+
+int uthread_create_for_ready(uthread_t *thread, void* (*start_routine)(void*), void *arg)
+{
+    if(idle_list.size() == 0)return -1;
+    int i = idle_list.front();
+    idle_list.pop_front();
+    ready_list.push_back(i);
+    if (thread != NULL) *thread = i;
+    uthread_context_init(i);
+    uthread_slots[i].func = start_routine;
+    uthread_slots[i].arg = arg;
+    uthread_slots[i].exit_status = 0;
+    makecontext(&uthread_slots[i].context, uthread_child, 0);
+    log_info("create new uthread id:%d current:%d ", i, current);
+    return i;
+}
 int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg)
 {
     if(idle_list.size() == 0)return -1;
@@ -114,7 +143,7 @@ int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg)
     uthread_slots[i].func = start_routine;
     uthread_slots[i].arg = arg;
     uthread_slots[i].exit_status = 0;
-    makecontext(&uthread_slots[i].context, uthread_helper, 0);
+    makecontext(&uthread_slots[i].context, uthread_child, 0);
     log_info("create new uthread id:%d current:%d ", i, current);
     return i;
 }
@@ -125,14 +154,17 @@ void uthread_yeild(int ts)
     //time_list.add(current);
     if(ts <= 0) ts = 5000;
     uthread_slots[current].timeout = ts + getms();
+    bool is_insert = false;
     for(list<int>::iterator it = time_list.begin(); it != time_list.end(); it++)
     {
         if(uthread_slots[*it].timeout > uthread_slots[current].timeout)
         {
             time_list.insert(it, current);
+            is_insert = true;
             break;
         } 
     }
+    if(!is_insert)time_list.push_back(current);
     ready_list.remove(current);
     log_debug("suspend thread: %d,  running thread:0", current);
     last = current;
@@ -157,13 +189,44 @@ void uthread_loop(void)
     while(ready_list.size() > 0)
     {
         int i = ready_list.front();
-        //ready_list.pop_front();
+        ready_list.pop_front();
         current = i;
         log_debug("in loop, switch to: %d", current);
         swapcontext(&uthread_slots[0].context, &uthread_slots[current].context);
         //log_debug("return to main_uthread");
     }
+    uint64_t  t = getms();
+    while(time_list.size() > 0) 
+    {
+        int i = time_list.front();
+        if(uthread_slots[i].timeout> t)break;
+        time_list.pop_front();
+        current = i;
+        log_debug("in loop, switch to: %d", current);
+        swapcontext(&uthread_slots[0].context, &uthread_slots[current].context);
+    }
+    for(list<timer_info>::iterator it = timer_list.begin(); it != timer_list.end(); it++)
+    {
+        if((it->last_time + it->intval) <t )
+        {
+            uthread_create_for_ready(NULL, it->func, it->arg);
+            if(it->is_loop)
+            {
+                it->last_time = t;
+            }
+            else
+            {
+                timer_list.erase(it);
+            }
+        }
+    }
+
     log_debug("end running uthread loop");
+}
+
+void* t(void* args)
+{
+    log_debug("shit shit shit time loop: %llu",  getms());
 }
 
 #ifdef test 
@@ -175,6 +238,7 @@ int main(int argc, char *argv[])
     child_uthread_init();
     init_listen_fd();
     epoll_init();
+    create_timer(t, 200, true);
     main_uthread();
 
     return 0;

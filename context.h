@@ -2,6 +2,7 @@
 #define __CONTEXT_H__
 #include <ucontext.h>
 #include <algorithm>
+#include <stdint.h>
 #include <vector>
 #define UTHREAD_MAX_NUM  256 
 #define STACK_SIZE 4096
@@ -15,6 +16,17 @@ struct uthread_struct
     void* (*func)(void *arg);
     void *arg;
     void *exit_status;
+};
+
+struct timer_info
+{
+    int timer_id;
+    uint64_t last_time;
+    int intval;
+    bool is_loop;
+    void* (*func)(void *arg);
+    void *arg;
+    
 };
 
 using namespace std;
@@ -89,8 +101,9 @@ void main_uthread(void);
 void uthread_context_init(int tid);
 void uthread_init(void);
 void uthread_exit(void *exit_status);
-void uthread_helper(void);
+void uthread_child(void);
 int uthread_create(uthread_t *thread, void* (*start_routine)(void*), void *arg);
+int uthread_create_for_ready(uthread_t *thread, void* (*start_routine)(void*), void *arg);
 void uthread_yeild(int ts);
 void uthread_loop(void);
 void uthread_resume(int);
