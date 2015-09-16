@@ -1,4 +1,4 @@
-obj= log.o context.o kern.o 
+obj= log.o context.o kern.o pbjson.o
 all:a.out
 a.out:$(obj)
 	g++ -g -o $@ $^
