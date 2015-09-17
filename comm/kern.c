@@ -181,12 +181,16 @@ void sockaddr_init(struct sockaddr_in* in, const char* ip, int port)
     in->sin_port = htons(port);
     inet_pton(AF_INET, ip, &in->sin_addr);
 }
-int m_connect(int fd, struct sockaddr* addr, int len, int timeout)
+int m_connect(const char* ip, int port, int timeout)
 {   
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in in;
+    sockaddr_init(&in, ip, port);
     setnonblocking(fd);
     log_debug("begin to connect to other server");
     time_t begin = time(NULL);
-    int n = connect(fd, addr, len);
+    int len = sizeof(in);
+    int n = connect(fd, (const sockaddr*)&in, len);
     if(n < 0 && errno != EINPROGRESS)
     {
         log_error("connect failed, fd:%d, errno:%d , reason:%s", fd, errno, strerror(errno));
@@ -198,8 +202,15 @@ int m_connect(int fd, struct sockaddr* addr, int len, int timeout)
     uthread_yeild(timeout);
     time_t end = time(NULL);
     if((end-begin)> 1) return -1;
+    return fd;
 }
 
+int m_close(int fd)
+{
+    close(fd);
+    reset_fd(fd);
+    fd2upid.erase(fd);
+}
 
 void* work(void* args)
 {

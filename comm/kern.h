@@ -16,8 +16,12 @@ int create_work_uthread(int fd);
 int active_work_uthread(int fd) ;
 int epoll_loop();
 
+
+void sockaddr_init(struct sockaddr_in* in, const char* ip, int port);
+
 int m_recv(int fd, char* buf, int len, int timeout);
 int m_send(int fd, char* buf, int len, int timeout);
-int m_connect(int fd, struct sockaddr* addr, int len, int timeout);
+int m_connect(const char* ip, int port, int timeout);
+int m_close(int fd);
 
 #endif
