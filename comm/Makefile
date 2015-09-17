@@ -1,4 +1,4 @@
-obj= log.o context.o kern.o pbjson.o test.o echo.pb.o echo.pb.serviceimpl.o
+obj= log.o context.o kern.o pbjson.o test.o echo.pb.o echo.pb.serviceimpl.o tcp_rpc_channel.o
 LIB=-lprotobuf
 all:a.out
 a.out:$(obj) 
