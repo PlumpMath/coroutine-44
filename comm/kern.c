@@ -12,8 +12,9 @@
 #include <map>
 #include <stdint.h>
 #include "kern.h"
-#include "log.h"
 #include "context.h"
+#include "echo.pb.h"
+#include "log.h"
 
 #define MAX_EVENTS 10
 using namespace std;
@@ -203,11 +204,34 @@ int m_connect(int fd, struct sockaddr* addr, int len, int timeout)
 void* work(void* args)
 {
     log_info("begin work");
-    char buf[128];
-    int len = 128;
     int fd= reinterpret_cast<int64_t>(args);
     fd2upid[fd] = get_upid();
-    m_recv(fd, buf, len, 1000);
+    uint32_t headlen;
+    m_recv(fd, reinterpret_cast<char*>(&headlen), sizeof(headlen), 1000);
+    char* buf = reinterpret_cast<char*>(malloc(headlen));
+    if(buf == NULL)return NULL;
+    m_recv(fd, buf, headlen, 1000);
+    RpcMeta meta;
+    meta.ParseFromArray(buf, headlen);
+    free(buf); buf= NULL;
+    buf = reinterpret_cast<char*>(malloc(meta.len()));
+    if(buf == NULL)return NULL;
+    google::protobuf::Service* service = GetServiceByName(meta.service_name());
+    if(service == NULL) return NULL;
+    const google::protobuf::ServiceDescriptor* service_desc =service->GetDescriptor();
+    const google::protobuf::MethodDescriptor* method_desc = service_desc->FindMethodByName(meta.method_name());
+
+    google::protobuf::Message* request = service->GetRequestPrototype(method_desc).New();
+    request->ParseFromArray(buf, meta.len());
+    free(buf); buf= NULL;
+    google::protobuf::Message* response = service->GetResponsePrototype(method_desc).New();
+
+    service->CallMethod(method_desc, NULL, request, response, NULL);
+
+    
+    
+    /*
+    len = (int*)head;
     buf[127] = 0;
     log_info("recv client data: %s", buf);
     int sub_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -227,6 +251,7 @@ void* work(void* args)
     close(fd);
     fd2upid.erase(fd);
     buf[127] = 0;
+    */
     return NULL;
 }
 int create_work_uthread(int fd)

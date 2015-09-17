@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <stdint.h>
 #include <vector>
+#include <string>
+#include <google/protobuf/service.h>
+#include <google/protobuf/descriptor.h>
 #define UTHREAD_MAX_NUM  256 
 #define STACK_SIZE 4096
 typedef int uthread_t;
@@ -107,4 +110,7 @@ int uthread_create_for_ready(uthread_t *thread, void* (*start_routine)(void*), v
 void uthread_yeild(int ts);
 void uthread_loop(void);
 void uthread_resume(int);
+int register_service(google::protobuf::Service* service);
+google::protobuf::Service* GetServiceByName(string servicename);
+void run(void);
 #endif

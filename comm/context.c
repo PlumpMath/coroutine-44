@@ -1,13 +1,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <list>
+#include <string>
+#include <map>
 #include "context.h"
 #include "kern.h"
 #include "log.h"
 
 using namespace std;
 
-#define test 
+//#define test 
 static uthread_t current = 0;
 static uthread_t last = 0;
 static struct uthread_struct uthread_slots[UTHREAD_MAX_NUM];
@@ -18,6 +20,9 @@ static list<int> time_list;
 
 
 static list<timer_info> timer_list;
+
+
+static map<string, google::protobuf::Service*> services;
 
 
 int get_upid()
@@ -227,6 +232,28 @@ void uthread_loop(void)
 void* t(void* args)
 {
     log_debug("shit shit shit time loop: %llu",  getms());
+}
+
+int register_service(google::protobuf::Service* service)
+{
+    services[service->GetDescriptor()->name()] = service;
+}
+
+google::protobuf::Service* GetServiceByName(string servicename)
+{
+   return services[servicename]; 
+}
+
+void run(void)
+{
+    log_init("./log/", 60, 0);
+    uthread_t tid;
+    main_uthread_init();
+    child_uthread_init();
+    init_listen_fd();
+    epoll_init();
+    create_timer(t, 200, true);
+    main_uthread();
 }
 
 #ifdef test 

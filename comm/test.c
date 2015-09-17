@@ -1,6 +1,9 @@
 #include <ucontext.h>  
 #include <stdio.h>  
+#include "context.h"
+#include "echo.pb.serviceimpl.h"
   
+/*
 ucontext_t child_uthread,main_uthread;  
 char stack[1024*128];  
 void func1(void * arg)  
@@ -36,9 +39,12 @@ void context_test()
     swapcontext(&main_uthread,&child_uthread);//切换到child上下文，保存当前上下文到main_uthread  
     puts("main_uthread3");//如果设置了后继上下文，func1函数指向完后会返回此处  
 }  
-  
+*/  
 int main()  
 {  
-    context_test();  
+    //context_test();  
+    MyServiceImpl* service = new MyServiceImpl();
+    register_service(service);
+    run();
     return 0;  
 }  
