@@ -107,8 +107,8 @@ void uthread_exit(void *exit_status)
 void uthread_child(void)
 {
     void* status = uthread_slots[current].func( uthread_slots[current].arg);
-    uthread_exit(status);
     log_debug("uthread id:%d exit ", current);
+    uthread_exit(status);
 }
 
 
@@ -210,7 +210,7 @@ void uthread_loop(void)
         log_debug("in loop, switch to: %d", current);
         swapcontext(&uthread_slots[0].context, &uthread_slots[current].context);
     }
-    for(list<timer_info>::iterator it = timer_list.begin(); it != timer_list.end(); it++)
+    for(list<timer_info>::iterator it = timer_list.begin(); it != timer_list.end();)
     {
         if((it->last_time + it->intval) <t )
         {
@@ -218,10 +218,11 @@ void uthread_loop(void)
             if(it->is_loop)
             {
                 it->last_time = t;
+                it++;
             }
             else
             {
-                timer_list.erase(it);
+                it = timer_list.erase(it);
             }
         }
     }
@@ -244,15 +245,13 @@ google::protobuf::Service* GetServiceByName(string servicename)
    return services[servicename]; 
 }
 
-void run(void)
+void run(int port)
 {
-    log_init("./log/", 60, 0);
     uthread_t tid;
     main_uthread_init();
     child_uthread_init();
-    init_listen_fd();
+    init_listen_fd(port);
     epoll_init();
-    create_timer(t, 200, true);
     main_uthread();
 }
 

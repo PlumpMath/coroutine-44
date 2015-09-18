@@ -110,7 +110,8 @@ int uthread_create_for_ready(uthread_t *thread, void* (*start_routine)(void*), v
 void uthread_yeild(int ts);
 void uthread_loop(void);
 void uthread_resume(int);
+int create_timer(void* (*func)(void*), int time_intval, bool is_loop);
 int register_service(google::protobuf::Service* service);
 google::protobuf::Service* GetServiceByName(string servicename);
-void run(void);
+void run(int port);
 #endif

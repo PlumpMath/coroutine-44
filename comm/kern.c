@@ -35,7 +35,7 @@ int setnonblocking(int fd)
     return 0;
 }
 
-void init_listen_fd()
+void init_listen_fd(int port)
 {
     listen_sock = socket(AF_INET, SOCK_STREAM,0);
     if(listen_sock < 0)
@@ -45,7 +45,7 @@ void init_listen_fd()
     }
     struct sockaddr_in sin;   
     sin.sin_family = AF_INET;   
-    sin.sin_port = htons(8000); 
+    sin.sin_port = htons(port); 
     sin.sin_addr.s_addr = INADDR_ANY;  
     if(bind(listen_sock, (struct sockaddr *)&sin, sizeof(sin))<0)
     {
@@ -191,6 +191,7 @@ int m_connect(const char* ip, int port, int timeout)
     time_t begin = time(NULL);
     int len = sizeof(in);
     int n = connect(fd, (const sockaddr*)&in, len);
+    fd2upid[fd] = get_upid();
     if(n < 0 && errno != EINPROGRESS)
     {
         log_error("connect failed, fd:%d, errno:%d , reason:%s", fd, errno, strerror(errno));
@@ -207,8 +208,8 @@ int m_connect(const char* ip, int port, int timeout)
 
 int m_close(int fd)
 {
-    close(fd);
     reset_fd(fd);
+    close(fd);
     fd2upid.erase(fd);
 }
 
@@ -227,10 +228,13 @@ void* work(void* args)
     free(buf); buf= NULL;
     buf = reinterpret_cast<char*>(malloc(meta.len()));
     if(buf == NULL)return NULL;
+    
+    m_recv(fd, buf, meta.len(), 500);
     google::protobuf::Service* service = GetServiceByName(meta.service_name());
     if(service == NULL) return NULL;
     const google::protobuf::ServiceDescriptor* service_desc =service->GetDescriptor();
     const google::protobuf::MethodDescriptor* method_desc = service_desc->FindMethodByName(meta.method_name());
+    log_debug("service name:%s, method name:%s", meta.service_name().c_str(), meta.method_name().c_str());
 
     google::protobuf::Message* request = service->GetRequestPrototype(method_desc).New();
     request->ParseFromArray(buf, meta.len());
@@ -238,8 +242,12 @@ void* work(void* args)
     google::protobuf::Message* response = service->GetResponsePrototype(method_desc).New();
 
     service->CallMethod(method_desc, NULL, request, response, NULL);
-
-    
+    string rsp; 
+    response->SerializeToString(&rsp);
+    headlen = rsp.size();
+    m_send(fd, (char*)&headlen, sizeof(headlen), 400);
+    m_send(fd,(char*)rsp.data(), rsp.size(),400);  
+    m_close(fd);
     
     /*
     len = (int*)head;
@@ -288,7 +296,7 @@ int active_work_uthread(int fd)
 
 int epoll_loop()
 {
-    nfds = epoll_wait(epollfd, events, MAX_EVENTS, 10);
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, 200);
     if (nfds == -1)
     {
         log_error("epoll_pwait");

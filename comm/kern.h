@@ -9,7 +9,7 @@ struct event_private_data
 
 
 int setnonblocking(int fd) ;
-void init_listen_fd() ;
+void init_listen_fd(int port) ;
 
 void epoll_init() ;
 int create_work_uthread(int fd);

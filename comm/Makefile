@@ -1,9 +1,13 @@
-obj= log.o context.o kern.o pbjson.o test.o echo.pb.o echo.pb.serviceimpl.o tcp_rpc_channel.o
+clientobj= log.o context.o kern.o pbjson.o client.o echo.pb.o echo.pb.serviceimpl.o tcp_rpc_channel.o
+serverobj= log.o context.o kern.o pbjson.o server.o echo.pb.o echo.pb.serviceimpl.o tcp_rpc_channel.o
 LIB=-lprotobuf
-all:a.out
-a.out:$(obj) 
+all:client server
+client:$(clientobj) 
 	g++ -g -o $@ $^ $(LIB)
-	-rm -rf *.o core*
+	#-rm -rf *.o core*
+server:$(serverobj) 
+	g++ -g -o $@ $^ $(LIB)
+	#-rm -rf *.o core*
 %.o:%.c
 	g++ -g -o $@ -c $<
 %.o:%.cc
@@ -11,6 +15,6 @@ a.out:$(obj)
 pbfiles:
 	protoc --cpp_out=./ --proto_path=./ echo.proto 
 clean:
-	-rm -rf *.o a.out log
-	-rm -rf *.pb.cc  *.pb.h
+	-rm -rf *.o client server clientlog serverlog
+	#-rm -rf *.pb.cc  *.pb.h
     
