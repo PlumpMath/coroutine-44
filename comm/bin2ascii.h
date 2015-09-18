@@ -8,8 +8,8 @@
  * it under the terms of the MIT license. See LICENSE for details.
  */
 
-#ifndef _TENCENT_PBRPC_BIN2ASCII_H_
-#define _TENCENT_PBRPC_BIN2ASCII_H_
+#ifndef _BIN2ASCII_H_
+#define _BIN2ASCII_H_
 
 #include <string>
 #include <stdexcept>
@@ -139,5 +139,5 @@ inline std::string b64_decode(const std::string &s)
 
 } // namespace comm
 
-#endif // _TENCENT_PBRPC_BIN2ASCII_H_
+#endif 
 

@@ -30,8 +30,8 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _TENCENT_PBRPC_PBJSON_H_
-#define _TENCENT_PBRPC_PBJSON_H_
+#ifndef _PBJSON_H_
+#define _PBJSON_H_
 
 #include <string>
 #include <google/protobuf/descriptor.h>
@@ -57,6 +57,6 @@ namespace comm{
 
 } // namespace comm
 
-#endif // _TENCENT_PBRPC_PBJSON_H_
+#endif 
 
 /* vim: set ts=4 sw=4 sts=4 tw=100 */

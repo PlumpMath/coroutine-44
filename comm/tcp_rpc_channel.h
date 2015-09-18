@@ -1,5 +1,5 @@
-#ifndef _TENCENT_PBRPC_SIMPLE_RPC_CHANNEL_IMPL_H_
-#define _TENCENT_PBRPC_SIMPLE_RPC_CHANNEL_IMPL_H_
+#ifndef _TCP_RPC_CHANNEL_H_
+#define _TCP_RPC_CHANNEL_H_
 #include <stdio.h>
 #include <string>
 #include <stdint.h>
